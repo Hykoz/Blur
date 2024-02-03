@@ -1,89 +1,112 @@
-import os
-import argparse
 import cv2
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image, ImageTk, ImageFilter
+from tkinter import Tk, Canvas, Button, filedialog
+from PIL import Image, ImageTk
 
-
-class ImageBlurringApp:
-    def __init__(self, master, image_path):
+class FaceBlurApp:
+    def __init__(self, master):
         self.master = master
-        self.master.title("Image Blurring Tool")
+        self.master.title("Face Blur App")
 
-        self.image_path = image_path
-        self.image = cv2.imread(self.image_path)
-        self.temp_image = self.image.copy()
-        self.ROIs = []
+        self.canvas = Canvas(master)
+        self.canvas.pack(fill="both", expand=True)
 
-        # UI Elements
-        self.canvas = tk.Canvas(self.master)
-        self.canvas.pack(expand=tk.YES, fill=tk.BOTH)
+        self.load_button = Button(master, text="Ouvrir une image", command=self.load_image)
+        self.load_button.pack()
 
-        self.blur_button = tk.Button(self.master, text="Blur Selection", command=self.blur_selection)
-        self.blur_button.pack(pady=5)
+        self.select_button = Button(master, text="Sélectionner les visages", command=self.select_faces)
+        self.select_button.pack()
 
-        self.save_button = tk.Button(self.master, text="Save Blurred Image", command=self.save_blurred_image)
-        self.save_button.pack(pady=5)
+        self.confirm_button = Button(master, text="Confirmer la sélection", command=self.confirm_selection, state="disabled")
+        self.confirm_button.pack()
 
-        self.display_image()
+        self.blur_button = Button(master, text="Flouter les visages", command=self.blur_faces, state="disabled")
+        self.blur_button.pack()
 
-        # Bind mouse events
-        self.canvas.bind("<ButtonPress-1>", self.on_mouse_press)
-        self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
+        self.save_button = Button(master, text="Enregistrer", command=self.save_image, state="disabled")
+        self.save_button.pack()
 
-    def display_image(self):
-        image_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
-        image_pil = Image.fromarray(image_rgb)
-        self.photo = ImageTk.PhotoImage(image_pil)
-        self.canvas.config(width=image_pil.width, height=image_pil.height)
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
+        self.image_path = None
+        self.image = None
+        self.cv_image = None
+        self.face_rectangles = []
 
-    def blur_selection(self):
-        if self.ROIs:
-            self.image = self.blur_boxes(self.image, self.ROIs)
+        self.selected_faces = []
+
+    def load_image(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png")])
+        if file_path:
+            self.image_path = file_path
+            self.image = Image.open(file_path)
+            self.cv_image = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
             self.display_image()
 
-    def blur_boxes(self, image, boxes):
-        for box in boxes:
-            x, y, w, h = [int(d) for d in box]
-            sub = image[y:y+h, x:x+w]
-            blur = cv2.GaussianBlur(sub, (23, 23), 30)
-            image[y:y+h, x:x+w] = blur
-        return image
+    def display_image(self):
+        if self.image:
+            self.tk_image = ImageTk.PhotoImage(self.image)
+            self.canvas.config(width=self.tk_image.width(), height=self.tk_image.height())
+            self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
 
-    def save_blurred_image(self):
-        output_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
-        if output_path:
-            cv2.imwrite(output_path, self.image)
+    def select_faces(self):
+        self.canvas.bind("<ButtonPress-1>", self.on_press)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        self.select_button.config(state="disabled")
+        self.confirm_button.config(state="normal")
 
-    def on_mouse_press(self, event):
+    def on_press(self, event):
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
+        self.rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="blue", width=2)
 
-    def on_mouse_drag(self, event):
+    def on_drag(self, event):
         cur_x = self.canvas.canvasx(event.x)
         cur_y = self.canvas.canvasy(event.y)
-        self.ROIs.append([self.start_x, self.start_y, cur_x, cur_y])
+        self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
+
+    def on_release(self, event):
+        end_x = self.canvas.canvasx(event.x)
+        end_y = self.canvas.canvasy(event.y)
+        self.face_rectangles.append((min(self.start_x, end_x), min(self.start_y, end_y), max(self.start_x, end_x), max(self.start_y, end_y)))
+        self.start_x, self.start_y = None, None
+        self.confirm_button.config(state="normal")
+
+    def confirm_selection(self):
+        self.canvas.delete("all")
         self.display_image()
 
-    def on_mouse_release(self, event):
-        self.start_x = None
-        self.start_y = None
+        for rect in self.face_rectangles:
+            self.canvas.create_rectangle(rect, outline="green", width=2)
 
+        self.selected_faces = self.face_rectangles.copy()
+        self.face_rectangles = []
+        self.confirm_button.config(state="disabled")
+        self.select_button.config(state="normal")
+        self.blur_button.config(state="normal")
 
-def main():
-    root = tk.Tk()
-    root.withdraw()  # Hide the main window
+    def blur_faces(self):
+        if self.cv_image is not None:
+            for rect in self.selected_faces:
+                x1, y1, x2, y2 = rect
+                face = self.cv_image[int(y1):int(y2), int(x1):int(x2)]
+                blurred_face = cv2.GaussianBlur(face, (99, 99), 30)
+                self.cv_image[int(y1):int(y2), int(x1):int(x2)] = blurred_face
 
-    # Prompt user to select an image file
-    image_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.gif")])
+            # Convertir l'image OpenCV en format PhotoImage sans changement de couleur
+            image_pil = Image.fromarray(self.cv_image)
+            self.tk_image = ImageTk.PhotoImage(image_pil)
 
-    if image_path:
-        app = ImageBlurringApp(root, image_path)
-        root.mainloop()
+            self.canvas.config(width=self.tk_image.width(), height=self.tk_image.height())
+            self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
 
+            self.save_button.config(state="normal")
+
+    def save_image(self):
+        if self.cv_image is not None:
+            save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+            if save_path:
+                cv2.imwrite(save_path, cv2.cvtColor(self.cv_image, cv2.COLOR_RGB2BGR))
 
 if __name__ == "__main__":
-    main()
+    root = Tk()
+    app = FaceBlurApp(root)
+    root.mainloop()
