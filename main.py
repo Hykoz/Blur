@@ -1,8 +1,10 @@
 import cv2
-from tkinter import Tk, Canvas, Button, filedialog
+from tkinter import Tk, Canvas, Button, filedialog, Scrollbar, HORIZONTAL, VERTICAL
 from PIL import Image, ImageTk
 
 class FaceBlurApp:
+    MAX_IMAGE_SIZE = (800, 800)
+    
     def __init__(self, master):
         self.master = master
         self.master.title("Face Blur App")
@@ -39,6 +41,8 @@ class FaceBlurApp:
             self.image = Image.open(file_path)
             self.cv_image = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
             self.display_image()
+            self.load_button.pack_forget()  # Cette ligne fait disparaître le bouton "Ouvrir une image"
+
 
     def display_image(self):
         if self.image:
